@@ -5,7 +5,7 @@ from cas import CASClient
 from fastapi import FastAPI, Cookie
 from starlette.requests import Request
 from starlette.responses import Response
-
+from fastapi.responses import HTMLResponse
 app = FastAPI(title=__name__)
 from fastapi.responses import RedirectResponse
 
@@ -31,7 +31,7 @@ async def index():
 @app.get('/profile')
 async def profile(request: Request, username: Optional[str] = Cookie(None)):
     if username:
-        return 'Logged in as %s. <a href="/logout">Logout</a>' % username
+        return HTMLResponse('Logged in as %s. <a href="/logout">Logout</a>' % username)
     return 'Login required. <a href="/login">Login</a>', 403
 
 
@@ -62,26 +62,26 @@ def login(response: Response, next: Optional[str] = None,
         user, attributes, pgtiou)
 
     if not user:
-        return 'Failed to verify ticket. <a href="/login">Login</a>'
+        return HTMLResponse('Failed to verify ticket. <a href="/login">Login</a>')
     else:  # Login successfully, redirect according `next` query parameter.
         response = RedirectResponse(next)
         response.set_cookie(key="username", value=user)
         return response
 
 
-@app.route('/logout')
+@app.get('/logout')
 def logout():
-    redirect_url = url_for('logout_callback')
+    redirect_url = url_for('logout_callback',_external=True)
     cas_logout_url = cas_client.get_logout_url(redirect_url)
     print('CAS logout URL: %s', cas_logout_url)
     return RedirectResponse(cas_logout_url)
 
 
-@app.route('/logout_callback')
+@app.get('/logout_callback')
 def logout_callback(response: Response):
     # redirect from CAS logout request after CAS logout successfully
     response.delete_cookie('username')
-    return 'Logged out from CAS. <a href="/login">Login</a>'
+    return HTMLResponse('Logged out from CAS. <a href="/login">Login</a>')
 
 
 if __name__ == '__main__':
