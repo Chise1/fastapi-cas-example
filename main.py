@@ -1,11 +1,12 @@
-
 from typing import Optional
 
 from cas import CASClient
-from fastapi import FastAPI, Cookie
+from fastapi import FastAPI
+from starlette.middleware.sessions import SessionMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 from fastapi.responses import HTMLResponse
+
 app = FastAPI(title=__name__)
 from fastapi.responses import RedirectResponse
 
@@ -14,33 +15,31 @@ cas_client = CASClient(
     service_url='http://127.0.0.1:8002/login?next=%2Fprofile',
     server_url='http://127.0.0.1:8000/cas/'
 )
+app.add_middleware(SessionMiddleware, secret_key="!secret")
 
-
-def url_for(url, _external=False):
-    if _external:
-        return 'http://127.0.0.1:8002/' + url
-    else:
-        return "/" + url
 
 
 @app.get('/')
-async def index():
-    return RedirectResponse(url_for('login'))
+async def index(request: Request):
+    return RedirectResponse(request.url_for('login'))
 
 
 @app.get('/profile')
-async def profile(request: Request, username: Optional[str] = Cookie(None)):
-    if username:
-        return HTMLResponse('Logged in as %s. <a href="/logout">Logout</a>' % username)
-    return 'Login required. <a href="/login">Login</a>', 403
+async def profile(request: Request):
+    print(request.session.get("user"))
+    user = request.session.get("user")
+    if user:
+        return HTMLResponse('Logged in as %s. <a href="/logout">Logout</a>' % user['user'])
+    return HTMLResponse('Login required. <a href="/login">Login</a>', status_code=403)
 
 
 @app.get('/login')
-def login(response: Response, next: Optional[str] = None,
-          ticket: Optional[str] = None, username: Optional[str] = Cookie(None)):
-    if username:
+def login(
+    request: Request, next: Optional[str] = None,
+    ticket: Optional[str] = None):
+    if request.session.get("user", None):
         # Already logged in
-        return RedirectResponse(url_for('profile'))
+        return RedirectResponse(request.url_for('profile'))
 
     # next = request.args.get('next')
     # ticket = request.args.get('ticket')
@@ -65,22 +64,23 @@ def login(response: Response, next: Optional[str] = None,
         return HTMLResponse('Failed to verify ticket. <a href="/login">Login</a>')
     else:  # Login successfully, redirect according `next` query parameter.
         response = RedirectResponse(next)
-        response.set_cookie(key="username", value=user)
+        request.session['user'] = dict(user=user)
         return response
 
 
 @app.get('/logout')
-def logout():
-    redirect_url = url_for('logout_callback',_external=True)
+def logout(request: Request):
+    redirect_url = request.url_for('logout_callback')
     cas_logout_url = cas_client.get_logout_url(redirect_url)
     print('CAS logout URL: %s', cas_logout_url)
     return RedirectResponse(cas_logout_url)
 
 
 @app.get('/logout_callback')
-def logout_callback(response: Response):
+def logout_callback(request: Request):
     # redirect from CAS logout request after CAS logout successfully
-    response.delete_cookie('username')
+    # response.delete_cookie('username')
+    request.session.pop("user", None)
     return HTMLResponse('Logged out from CAS. <a href="/login">Login</a>')
 
 
