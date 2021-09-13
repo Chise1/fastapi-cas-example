@@ -1,7 +1,7 @@
 # fastapi-cas-example
 
 An example repo to demo how to integrate python-cas into a fastapi app.
-
+If my project can give you help,please give me a star.
 # run
 
 ```shell
